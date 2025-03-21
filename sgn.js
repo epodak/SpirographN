@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-var sgn = (function(settings) {
+var sgn = (function (settings) {
 	'use strict'
 
 	return {
@@ -106,11 +106,20 @@ var sgn = (function(settings) {
 		//Begin creating sidebar elements
 
 		//add static elements and values from preset
-		//add events to inputs
+		// 在创建标题后添加侧边栏切换按钮
 		var e = document.createElement("SPAN");
 		e.className = "title";
 		e.innerHTML = "Spirograph";
 		e.innerHTML += '<span class="n">&#8319;</span>';
+
+		// 添加侧边栏切换按钮
+		var toggleBtn = document.createElement("BUTTON");
+		toggleBtn.className = "sidebar-toggle";
+		toggleBtn.innerHTML = "◀";
+		toggleBtn.setAttribute("title", "隐藏侧边栏");
+		toggleBtn.onclick = toggleSidebar;
+		e.appendChild(toggleBtn);
+
 		settings.sidebarDiv.appendChild(e);
 
 		e = document.createElement("DIV");
@@ -347,12 +356,12 @@ var sgn = (function(settings) {
 		//load values into inputs
 		var lr = loadValues(d);
 
-		window.onresize = function(e) {
+		window.onresize = function (e) {
 			resizeCanvas(e);
 		};
 
 		var rotorsDiv = document.getElementById('rotors');
-		rotorsDiv.style.height = (settings.numRotors * 27) + (settings.numRotors * 4.3 )   + 'px';
+		rotorsDiv.style.height = (settings.numRotors * 27) + (settings.numRotors * 4.3) + 'px';
 	}
 
 	function spot(d) {
@@ -371,7 +380,30 @@ var sgn = (function(settings) {
 		}
 
 	}
+	// 添加侧边栏切换功能
+	function toggleSidebar() {
+		var sidebar = settings.sidebarDiv;
+		var toggleBtn = document.querySelector('.sidebar-toggle');
 
+		if (sidebar.classList.contains('sidebar-collapsed')) {
+			// 展开侧边栏
+			sidebar.classList.remove('sidebar-collapsed');
+			sidebar.classList.add('sidebar-expanded');
+			toggleBtn.classList.remove('toggle-collapsed');
+			toggleBtn.innerHTML = "◀";
+			toggleBtn.setAttribute("title", "隐藏侧边栏");
+		} else {
+			// 收起侧边栏
+			sidebar.classList.remove('sidebar-expanded');
+			sidebar.classList.add('sidebar-collapsed');
+			toggleBtn.classList.add('toggle-collapsed');
+			toggleBtn.innerHTML = "▶";
+			toggleBtn.setAttribute("title", "显示侧边栏");
+		}
+
+		// 重新调整画布大小
+		setTimeout(resizeCanvas, 300);
+	}
 	// buttons
 
 	function addButton() {
@@ -390,7 +422,7 @@ var sgn = (function(settings) {
 		settings.sidebarDiv.appendChild(b);
 
 
-		b.addEventListener("click", function() {
+		b.addEventListener("click", function () {
 
 			//get current last rotor radius
 			var newRad = document.getElementById(settings.idNames.rotor + settings.numRotors).value / 2;
@@ -410,7 +442,7 @@ var sgn = (function(settings) {
 			document.getElementById(settings.idNames.pen).value = newRad;
 
 			var rotorsDiv = document.getElementById('rotors');
-			rotorsDiv.style.height = (settings.numRotors * 27) + (settings.numRotors * 4.3 )   + 'px';
+			rotorsDiv.style.height = (settings.numRotors * 27) + (settings.numRotors * 4.3) + 'px';
 
 			//if this is the second rotor we need our delete button.
 			if (settings.numRotors === 2) {
@@ -451,7 +483,7 @@ var sgn = (function(settings) {
 		e.innerHTML = "delete last rotor"
 		e.setAttribute("id", settings.idNames.deleteLabel)
 		b.appendChild(e);
-		b.addEventListener("click", function() {
+		b.addEventListener("click", function () {
 			var element = document.getElementById(settings.idNames.item + settings.numRotors);
 			element.parentNode.removeChild(element);
 			if (settings.numRotors === 2) {
@@ -469,9 +501,9 @@ var sgn = (function(settings) {
 			//scroll to the bottom
 			var div = document.getElementById(settings.idNames.rotors);
 			div.scrollTop = div.scrollHeight;
-			
+
 			var rotorsDiv = document.getElementById('rotors');
-			rotorsDiv.style.height = (settings.numRotors * 27) + (settings.numRotors * 4.3 )   + 'px';
+			rotorsDiv.style.height = (settings.numRotors * 27) + (settings.numRotors * 4.3) + 'px';
 		});
 
 	}
@@ -524,7 +556,7 @@ var sgn = (function(settings) {
 	function drawButton() {
 		var button = makeButton(settings.idNames.draw, "draw", false, "draw");
 		settings.sidebarDiv.appendChild(button);
-		button.addEventListener("click", function() {
+		button.addEventListener("click", function () {
 			if (!settings.draw) {
 				if (settings.i === 0) {
 					settings.timer = new Date().getTime() / 1000;
@@ -561,7 +593,7 @@ var sgn = (function(settings) {
 		var image = makeImage(settings.idNames.hideIcon, "edit", "img/hide.png");
 		button.appendChild(image);
 		settings.sidebarDiv.appendChild(button);
-		button.addEventListener("click", function() {
+		button.addEventListener("click", function () {
 			if (settings.circles === "show") {
 				settings.circles = "hide";
 				button.setAttribute("title", "show circles");
@@ -581,7 +613,7 @@ var sgn = (function(settings) {
 		var image = makeImage(settings.idNames.openIcon, "edit", "img/open.png");
 		button.appendChild(image);
 		settings.sidebarDiv.appendChild(button);
-		button.addEventListener("click", function() {
+		button.addEventListener("click", function () {
 			var d = settings.canvasPen.toDataURL();
 			var newTab = window.open();
 			var img = newTab.document.createElement('img');
@@ -598,7 +630,7 @@ var sgn = (function(settings) {
 		var image = makeImage(settings.idNames.linkIcon, "edit", "img/link.png");
 		button.appendChild(image);
 		settings.sidebarDiv.appendChild(button);
-		button.addEventListener("click", function() {
+		button.addEventListener("click", function () {
 			window.open(settings.url);
 		});
 	}
@@ -608,7 +640,7 @@ var sgn = (function(settings) {
 		var image = makeImage(settings.idNames.zoomInIcon, "edit", "img/zoomIn.png");
 		button.appendChild(image);
 		settings.sidebarDiv.appendChild(button);
-		button.addEventListener("click", function() {
+		button.addEventListener("click", function () {
 			zoom("in");
 		});
 	}
@@ -618,7 +650,7 @@ var sgn = (function(settings) {
 		var image = makeImage(settings.idNames.zoomOutIcon, "edit", "img/zoomOut.png");
 		button.appendChild(image);
 		settings.sidebarDiv.appendChild(button);
-		button.addEventListener("click", function() {
+		button.addEventListener("click", function () {
 			zoom("out");
 		});
 	}
@@ -647,7 +679,7 @@ var sgn = (function(settings) {
 		button.appendChild(image);
 		button.appendChild(span);
 		settings.sidebarDiv.appendChild(button);
-		button.addEventListener("click", function() {
+		button.addEventListener("click", function () {
 			window.open("https://github.com/seedcode/SpirographN");
 		});
 	}
@@ -833,7 +865,7 @@ var sgn = (function(settings) {
 					settings.spinPitches.push((settings.radii[c - 1] / thisRotor) + 1);
 					if (settings.types[c - 1] === "h") {
 						settings.directions.push(settings.directions[c - 1]);
-					} else(
+					} else (
 						settings.directions.push(settings.directions[c - 1] * -1)
 					)
 				} else {
@@ -928,7 +960,11 @@ var sgn = (function(settings) {
 		settings.canvasPen.height = settings.divCanvasHeight + offscreen * 2;
 		settings.canvasPen.width = settings.divCanvas.clientWidth - settings.sidebarWidth + offscreen * 2;
 		settings.canvasPen.setAttribute("Style", "left:" + settings.left + "px;top:" + settings.top + "px;position:absolute;z-index:20");
-
+		// 确保canvas不会超出容器
+		settings.canvasCircles.style.maxWidth = "100%";
+		settings.canvasCircles.style.maxHeight = "100%";
+		settings.canvasPen.style.maxWidth = "100%";
+		settings.canvasPen.style.maxHeight = "100%";
 
 		//update coordinates based on new position
 		if (settings.penStart.x != 0) {
@@ -996,7 +1032,7 @@ var sgn = (function(settings) {
 
 		//draw Stator
 		if (settings.circles === "show") {
-			drawOneCircle(settings.canvasCircles, settings.a, settings.b, settings.radii[0] * zoom );
+			drawOneCircle(settings.canvasCircles, settings.a, settings.b, settings.radii[0] * zoom);
 		}
 
 		//start at the center
@@ -1266,25 +1302,25 @@ var sgn = (function(settings) {
 
 	function inputEvent(inputId, event) {
 		var input = document.getElementById(inputId);
-		input.addEventListener(event, function(e) {
+		input.addEventListener(event, function (e) {
 			setValues();
 			if (!settings.draw) {
 				drawCircles();
 			}
 		});
-		input.addEventListener('keydown',function(e){
-			if(e.code==='Minus'){
+		input.addEventListener('keydown', function (e) {
+			if (e.code === 'Minus') {
 				e.preventDefault();
 			}
 		});
-		input.addEventListener('paste',function(e){
+		input.addEventListener('paste', function (e) {
 			e.preventDefault();
 		});
 	}
 
 	function presetEvent(inputId, event) {
 		var input = document.getElementById(inputId);
-		input.addEventListener(event, function(event) {
+		input.addEventListener(event, function (event) {
 			var val = this.value;
 			var c;
 			var i;
@@ -1295,8 +1331,8 @@ var sgn = (function(settings) {
 			};
 			document.getElementById(settings.idNames.stator).focus();
 			var rotorsDiv = document.getElementById('rotors');
-			if(rotorsDiv){
-				rotorsDiv.style.height = (settings.numRotors * 27) + (settings.numRotors * 4.3 )   + 'px';
+			if (rotorsDiv) {
+				rotorsDiv.style.height = (settings.numRotors * 27) + (settings.numRotors * 4.3) + 'px';
 			}
 		});
 	}
@@ -1335,7 +1371,7 @@ var sgn = (function(settings) {
 			settings.iPosition = 0;
 		}
 		//reset zoom
-    settings.zoomStack = [1];
+		settings.zoomStack = [1];
 		settings.currentZoom = 1;
 		drawCircles();
 	}
@@ -1375,28 +1411,28 @@ var sgn = (function(settings) {
 
 	function zoom(inOut) {
 
-		if(settings.zoomStack.length>1 && inOut==="in" && settings.zoomStack[0]<1) {
+		if (settings.zoomStack.length > 1 && inOut === "in" && settings.zoomStack[0] < 1) {
 			//we're changing directions from going out to in
 			var removed = settings.zoomStack.shift();
 		}
-		else if(settings.zoomStack.length>1 && inOut==="out" && settings.zoomStack[0]>1) {
+		else if (settings.zoomStack.length > 1 && inOut === "out" && settings.zoomStack[0] > 1) {
 			//we're changing directions from going in to out
 			var removed = settings.zoomStack.shift();
 		}
-		else if (inOut === "in"){
+		else if (inOut === "in") {
 			//same direction or first move
 			settings.zoomStack.unshift(1 + settings.zoom);
 
 		}
-		else if (inOut === "out"){
+		else if (inOut === "out") {
 			//same direction or first move
-			settings.zoomStack.unshift( 1 - settings.zoom);
+			settings.zoomStack.unshift(1 - settings.zoom);
 		}
-		else{
+		else {
 			return;
 		}
 
-	  settings.currentZoom = Math.pow(settings.zoomStack[0],settings.zoomStack.length-1);
+		settings.currentZoom = Math.pow(settings.zoomStack[0], settings.zoomStack.length - 1);
 
 		drawCircles();
 
@@ -1571,7 +1607,7 @@ var sgn = (function(settings) {
 				"wd": ".2",
 				"cl": "#8FBC8F",
 				"sp": "1",
-			}, 
+			},
 
 			{
 				"name": "kaleidoscope",
@@ -1582,7 +1618,7 @@ var sgn = (function(settings) {
 				"wd": ".05",
 				"cl": "#4B0082",
 				"sp": "1",
-			}, 
+			},
 
 			{
 				"name": "tubular",
@@ -1790,7 +1826,7 @@ var sgn = (function(settings) {
 				"cl": "#6A5ACD",
 				"sp": "1000",
 			},
-			
+
 			{
 				"name": "amethyst",
 				"st": "350",
@@ -2029,6 +2065,6 @@ var sgn = (function(settings) {
 		}, {
 			"name": "fastest",
 			"speed": 1000,
-		}, ]
+		},]
 	}
 );
