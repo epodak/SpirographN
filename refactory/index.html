@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Spirograph&#8319;</title>
+    <link rel="shortcut icon" href="img/favicon.gif" type="image/x-icon">
+    <link rel="stylesheet" type="text/css" href="sgn.css">
+    <!-- 加载拆分后的JS文件 -->
+    <script src="sgn-presets.js" type="text/javascript"></script>
+    <script src="sgn-drawing.js" type="text/javascript"></script>
+    <script src="sgn-ui.js" type="text/javascript"></script>
+    <script src="sgn-core.js" type="text/javascript"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body>
+
+    <div class="logo">
+        <a href="http://SeedCode.com" target="_blank" style="cursor:pointer"><img class="logo" src="img/logo.png"
+                alt="SeedCode Logo"></a>
+    </div>
+
+    <div id="sidebar" class="sidebar-expanded"></div>
+    <div id="pad"></div>
+
+    <script type="text/javascript">
+        sgn.load("sidebar", "pad");
+    </script>
+
+</body>
+
+</html>
