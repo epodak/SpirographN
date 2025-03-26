@@ -590,23 +590,34 @@ var sgn = (function (settings) {
 				// 如果在3D模式下，确保曲线已初始化
 				if (settings.enable3D) {
 					console.log("初始化3D曲线");
-					if (!settings.three.line) {
-						clear3DScene();
-					} else {
-						// 清除已有的曲线数据
-						settings.three.points = [];
-						if (settings.three.line.geometry) {
-							settings.three.line.geometry.dispose();
-							settings.three.line.geometry = new THREE.BufferGeometry();
-						}
-					}
+					
+					// 清除所有现有的点和曲线
+					settings.three.points = [];
+					
+					// 强制重新创建曲线
+					clear3DScene();
 					
 					// 重绘3D齿轮状态
 					drawCircles3D();
 					
+					// 确保画笔位置正确初始化
+					if (settings.pen) {
+						// 保存初始画笔位置，用于检测完整循环
+						settings.penStart = {
+							x: settings.pen.x,
+							y: settings.pen.y
+						};
+						
+						// 初始化曲线点
+						settings.curvePoints = [
+							{x: settings.pen.x, y: settings.pen.y},
+							{x: settings.pen.x, y: settings.pen.y}
+						];
+					}
+					
 					// 确保渲染
 					if (settings.three.renderer && settings.three.scene && settings.three.camera) {
-						settings.three.renderer.render(settings.three.scene, settings.three.camera);
+							settings.three.renderer.render(settings.three.scene, settings.three.camera);
 					}
 				} else {
 					// 在2D模式下，重绘圆圈
@@ -648,12 +659,60 @@ var sgn = (function (settings) {
 				settings.circles = "hide";
 				button.setAttribute("title", "show circles");
 				setValues();
-				drawCircles();
+				
+				// 在3D模式下也处理齿轮的隐藏显示
+				if (settings.enable3D) {
+					// 隐藏3D齿轮组
+					if (settings.three.spirographGroup) {
+						// 保存曲线对象
+						let curve = settings.three.line;
+						
+						// 遍历并隐藏除了曲线以外的所有对象
+						for (let i = 0; i < settings.three.spirographGroup.children.length; i++) {
+							const obj = settings.three.spirographGroup.children[i];
+							if (obj !== curve) {
+								obj.visible = false;
+							}
+						}
+						
+						// 确保渲染更新
+						if (settings.three.renderer && settings.three.scene && settings.three.camera) {
+							settings.three.renderer.render(settings.three.scene, settings.three.camera);
+						}
+					}
+				} else {
+					// 2D模式下正常处理
+					drawCircles();
+				}
 			} else {
 				settings.circles = "show";
 				button.setAttribute("title", "hide circles");
 				setValues();
-				drawCircles();
+				
+				// 在3D模式下也处理齿轮的隐藏显示
+				if (settings.enable3D) {
+					// 显示3D齿轮组
+					if (settings.three.spirographGroup) {
+						// 遍历并显示所有对象（除了曲线，因为它应该始终可见）
+						for (let i = 0; i < settings.three.spirographGroup.children.length; i++) {
+							const obj = settings.three.spirographGroup.children[i];
+							if (obj !== settings.three.line) {
+								obj.visible = true;
+							}
+						}
+						
+						// 重绘3D齿轮
+						drawCircles3D();
+						
+						// 确保渲染更新
+						if (settings.three.renderer && settings.three.scene && settings.three.camera) {
+							settings.three.renderer.render(settings.three.scene, settings.three.camera);
+						}
+					}
+				} else {
+					// 2D模式下正常处理
+					drawCircles();
+				}
 			}
 		});
 	}
@@ -758,7 +817,7 @@ var sgn = (function (settings) {
 				gridButton.style.display = 'none';
 				
 				// 隐藏Three.js渲染器
-				if (settings.three.renderer) {
+				if (settings.three.container) {
 					settings.three.container.style.display = 'none';
 				}
 				
@@ -787,7 +846,9 @@ var sgn = (function (settings) {
 				}
 				
 				// 显示Three.js渲染器
-				settings.three.container.style.display = 'block';
+				if (settings.three.container) {
+					settings.three.container.style.display = 'block';
+				}
 				
 				// 隐藏2D画布
 				settings.canvasCircles.style.display = 'none';
@@ -800,8 +861,13 @@ var sgn = (function (settings) {
 				// 清除3D场景
 				clear3DScene();
 				
-				// 显示齿轮
+				// 绘制齿轮
 				drawCircles3D();
+				
+				// 确保轨道控制器启用
+				if (settings.three.controls) {
+					settings.three.controls.enabled = true;
+				}
 				
 				// 如果需要继续绘制，重新启动
 				if (settings.draw) {
@@ -1221,50 +1287,54 @@ var sgn = (function (settings) {
 			//draw Pen
 			//pen pitch set in last circle iteration
 			var penPt = circlePoint(pt.x, pt.y, thisRad, i * penPitch);
-			if (settings.circles === "show") {
-				var ctx = settings.canvasCircles.getContext("2d");
-				ctx.lineWidth = .3;
-				ctx.lineStyle = settings.circleColor;
-				ctx.beginPath();
-				ctx.moveTo(pt.x, pt.y);
-				ctx.lineTo(penPt.x, penPt.y);
-				ctx.stroke();
-				ctx.closePath();
-				//circle for pen Point
+			
+			// 保存最后的画笔位置用于曲线绘制
+			settings.pen = penPt;
+			
+			if (c === settings.radii.length - 1) {
+				//store final rotor
+				settings.currentRotorCenter = pt;
+				settings.thisRad = thisRad;
+				settings.penPitch = penPitch;
 			}
+			
 			c++;
 		}
-
-		//draw Pen
-		//pen pitch set in last circle iteration
-		var penPt = circlePoint(pt.x, pt.y, settings.penRad * zoom, i * penPitch);
-
-		//mark our starting point
-		if (settings.i === 0) {
-			settings.penStart = penPt;
-		}
-
-		//line from center to pen
+		
+		//draw Pen Arm
 		if (settings.circles === "show") {
+			//draw Pen
 			var ctx = settings.canvasCircles.getContext("2d");
-			ctx.lineWidth = .2;
-			ctx.lineStyle = settings.circleColor;
 			ctx.beginPath();
-			ctx.moveTo(pt.x, pt.y);
-			ctx.lineTo(penPt.x, penPt.y);
+			ctx.strokeStyle = settings.circleColor;
+			ctx.lineWidth = settings.circleStroke / 2;
+			ctx.moveTo(settings.currentRotorCenter.x, settings.currentRotorCenter.y);
+			ctx.lineTo(settings.pen.x, settings.pen.y);
 			ctx.stroke();
 			ctx.closePath();
-
-			//circle for pen Point
-			drawOneCircle(settings.canvasCircles, penPt.x, penPt.y, 1, true);
 		}
-
-		//update curve points for drawCurve()
-		//only maintain previous point, so we'll always plot previous to current.
-		settings.curvePoints.push(penPt);
-		if (settings.curvePoints.length > 2) {
-			settings.curvePoints.shift();
+		
+		//draw Pen
+		if (settings.circles === "show") {
+			drawOneCircle(settings.canvasCircles, settings.pen.x, settings.pen.y, 1, false);
 		}
+		
+		//store pen data
+		if (settings.curvePoints.length < 1) {
+			settings.curvePoints.push({
+				"x": settings.pen.x,
+				"y": settings.pen.y
+			});
+			settings.penStart = {
+				"x": settings.pen.x,
+				"y": settings.pen.y
+			};
+		}
+		settings.curvePoints[0] = settings.curvePoints[1] || settings.curvePoints[0];
+		settings.curvePoints[1] = {
+			"x": settings.pen.x,
+			"y": settings.pen.y
+		};
 	}
 
 	function drawOneCircle(canvas, a, b, r, fill) {
@@ -1338,24 +1408,42 @@ var sgn = (function (settings) {
 				-(p2.y - centerY) // 取负值以匹配Three.js坐标系统
 			);
 			
+			// 调试日志
+			console.log(`添加3D点: (${point.x.toFixed(2)}, ${point.y.toFixed(2)}, ${point.z.toFixed(2)}), 点数量: ${settings.three.points.length}`);
+			
 			// 添加点到我们的3D点数组
 			settings.three.points.push(point);
 			
+			// 确保点不会超过限制，防止性能问题
+			const maxPoints = 10000; // 最大点数
+			if (settings.three.points.length > maxPoints) {
+				// 去除最早的点
+				settings.three.points.shift();
+			}
+			
 			// 更新线条几何体
 			if (settings.three.line) {
-				// 使用更新后的点创建新的BufferGeometry
-				const geometry = new THREE.BufferGeometry().setFromPoints(settings.three.points);
-				
-				// 替换旧的几何体
-				if (settings.three.line.geometry) {
-					settings.three.line.geometry.dispose();
+				if (settings.three.points.length > 1) {
+					// 使用更新后的点创建新的BufferGeometry
+					const geometry = new THREE.BufferGeometry().setFromPoints(settings.three.points);
+					
+					// 替换旧的几何体
+					if (settings.three.line.geometry) {
+						settings.three.line.geometry.dispose();
+					}
+					settings.three.line.geometry = geometry;
+					
+					// 更新材质颜色
+					if (settings.three.line.material) {
+						settings.three.line.material.color.set(settings.curveColor);
+						settings.three.line.material.needsUpdate = true;
+						settings.three.line.material.linewidth = Math.max(1, parseFloat(settings.curveWidth));
+					}
 				}
-				settings.three.line.geometry = geometry;
-				
-				// 更新材质颜色，以防颜色被更改
-				if (settings.three.line.material) {
-					settings.three.line.material.color.set(settings.curveColor);
-				}
+			} else {
+				// 如果线条不存在，创建一个新的
+				console.log('创建新的3D曲线');
+				clear3DScene();
 			}
 			
 			// 确保渲染场景
@@ -1383,12 +1471,13 @@ var sgn = (function (settings) {
 		if (
 			settings.curvePoints.length >= 2 && 
 			settings.draw && 
-			settings.i > settings.iterator &&
+			settings.i > settings.iterator * 10 && // 确保我们有足够的迭代来形成曲线
 			settings.curvePoints[1] && 
 			settings.penStart && 
-			settings.curvePoints[1].x === settings.penStart.x &&
-			settings.curvePoints[1].y.toFixed(1) === settings.penStart.y.toFixed(1)
+			Math.abs(settings.curvePoints[1].x - settings.penStart.x) < 1 &&
+			Math.abs(settings.curvePoints[1].y - settings.penStart.y) < 1
 		) {
+			console.log('检测到曲线已回到起点，停止绘制');
 			var nd = new Date().getTime() / 1000;
 			settings.timer = nd - settings.timer;
 			var button = document.getElementById(settings.idNames.draw);
@@ -1419,9 +1508,10 @@ var sgn = (function (settings) {
 
 		// 调整速度，使每帧最小迭代次数为1
 		if (settings.speed < 1) {
-			stu = 1
+			stu = 1;
 		} else {
-			stu = settings.speed;
+			// 在3D模式下，提高速度倍数以解决旋转慢的问题
+			stu = settings.enable3D ? settings.speed * 3 : settings.speed;
 		}
 
 		// 如果速度太快，隐藏圆圈
@@ -1450,12 +1540,13 @@ var sgn = (function (settings) {
 			if (
 				settings.curvePoints.length >= 2 && 
 				settings.draw && 
-				settings.i > settings.iterator &&
+				settings.i > settings.iterator * 10 && // 确保我们有足够的迭代来形成曲线
 				settings.curvePoints[1] && 
 				settings.penStart && 
-				settings.curvePoints[1].x === settings.penStart.x &&
-				settings.curvePoints[1].y.toFixed(1) === settings.penStart.y.toFixed(1)
+				Math.abs(settings.curvePoints[1].x - settings.penStart.x) < 1 &&
+				Math.abs(settings.curvePoints[1].y - settings.penStart.y) < 1
 			) {
+				console.log('检测到曲线已回到起点，停止绘制');
 				var nd = new Date().getTime() / 1000;
 				settings.timer = nd - settings.timer;
 				var button = document.getElementById(settings.idNames.draw);
@@ -1482,7 +1573,7 @@ var sgn = (function (settings) {
 
 			drawCircles();
 			drawCurve();
-			// 如果我们完成了1000次迭代，在这里调用frame，以便有一些初始反馈
+			// 增加迭代计数
 			settings.i = settings.i + settings.iterator;
 			c = c + settings.iterator;
 		}
@@ -1493,7 +1584,9 @@ var sgn = (function (settings) {
 
 		// 如果速度是小数，则创建timeout
 		if (settings.speed < 1) {
-			setTimeout(draw, 10 / settings.speed);
+			// 3D模式下加快超低速度的更新
+			const timeout = settings.enable3D ? 10 / (settings.speed * 3) : 10 / settings.speed;
+			setTimeout(draw, timeout);
 		} else {
 			// 或者只请求下一帧
 			requestAnimationFrame(draw);
@@ -1746,12 +1839,190 @@ var sgn = (function (settings) {
 		// 添加轨道控制器
 		try {
 			console.log('设置轨道控制器...');
+			
+			// 如果没有加载OrbitControls，先加载它
+			if (typeof THREE.OrbitControls === 'undefined') {
+				console.log('没有发现OrbitControls，尝试加载...');
+				
+				// 简单的OrbitControls实现，这将作为备用方案
+				THREE.OrbitControls = function(camera, domElement) {
+					this.camera = camera;
+					this.domElement = domElement;
+					this.enabled = true;
+					this.target = new THREE.Vector3();
+					this.minDistance = 0;
+					this.maxDistance = Infinity;
+					this.enableZoom = true;
+					this.zoomSpeed = 1.0;
+					this.enableRotate = true;
+					this.rotateSpeed = 1.0;
+					this.enablePan = true;
+					this.panSpeed = 1.0;
+					this.enableDamping = false;
+					this.dampingFactor = 0.05;
+					
+					// 添加旋转和缩放功能的简单实现
+					let scope = this;
+					let rotateStart = new THREE.Vector2();
+					let rotateEnd = new THREE.Vector2();
+					let rotateDelta = new THREE.Vector2();
+					let panStart = new THREE.Vector2();
+					let panEnd = new THREE.Vector2();
+					let panDelta = new THREE.Vector2();
+					let dollyStart = new THREE.Vector2();
+					let dollyEnd = new THREE.Vector2();
+					let dollyDelta = new THREE.Vector2();
+					let STATE = { NONE: -1, ROTATE: 0, DOLLY: 1, PAN: 2 };
+					let state = STATE.NONE;
+					
+					// 事件监听器
+					this.domElement.addEventListener('mousedown', onMouseDown, false);
+					this.domElement.addEventListener('mousemove', onMouseMove, false);
+					this.domElement.addEventListener('mouseup', onMouseUp, false);
+					this.domElement.addEventListener('wheel', onMouseWheel, false);
+					
+					function onMouseDown(event) {
+						if (!scope.enabled) return;
+						
+						event.preventDefault();
+						
+						if (event.button === 0) {
+							state = STATE.ROTATE;
+							rotateStart.set(event.clientX, event.clientY);
+						} else if (event.button === 1) {
+							state = STATE.DOLLY;
+							dollyStart.set(event.clientX, event.clientY);
+						} else if (event.button === 2) {
+							state = STATE.PAN;
+							panStart.set(event.clientX, event.clientY);
+						}
+					}
+					
+					function onMouseMove(event) {
+						if (!scope.enabled) return;
+						
+						event.preventDefault();
+						
+						if (state === STATE.ROTATE) {
+							rotateEnd.set(event.clientX, event.clientY);
+							rotateDelta.subVectors(rotateEnd, rotateStart);
+							
+							// 旋转相机
+							const element = scope.domElement;
+							scope.rotateLeft(2 * Math.PI * rotateDelta.x / element.clientWidth * scope.rotateSpeed);
+							scope.rotateUp(2 * Math.PI * rotateDelta.y / element.clientHeight * scope.rotateSpeed);
+							
+							rotateStart.copy(rotateEnd);
+						} else if (state === STATE.DOLLY) {
+							dollyEnd.set(event.clientX, event.clientY);
+							dollyDelta.subVectors(dollyEnd, dollyStart);
+							
+							if (dollyDelta.y > 0) {
+								scope.dollyIn(0.95);
+							} else if (dollyDelta.y < 0) {
+								scope.dollyOut(0.95);
+							}
+							
+							dollyStart.copy(dollyEnd);
+						} else if (state === STATE.PAN) {
+							panEnd.set(event.clientX, event.clientY);
+							panDelta.subVectors(panEnd, panStart);
+							
+							scope.pan(panDelta.x, panDelta.y);
+							
+							panStart.copy(panEnd);
+						}
+						
+						scope.update();
+					}
+					
+					function onMouseUp() {
+						if (!scope.enabled) return;
+						state = STATE.NONE;
+					}
+					
+					function onMouseWheel(event) {
+						if (!scope.enabled || !scope.enableZoom) return;
+						
+						event.preventDefault();
+						
+						if (event.deltaY < 0) {
+							scope.dollyOut(0.95);
+						} else {
+							scope.dollyIn(0.95);
+						}
+						
+						scope.update();
+					}
+					
+					// 添加旋转方法
+					this.rotateLeft = function(angle) {
+						const quaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+						const position = new THREE.Vector3().subVectors(this.camera.position, this.target);
+						position.applyQuaternion(quaternion);
+						this.camera.position.copy(position.add(this.target));
+						this.camera.lookAt(this.target);
+					};
+					
+					this.rotateUp = function(angle) {
+						const quaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), angle);
+						const position = new THREE.Vector3().subVectors(this.camera.position, this.target);
+						position.applyQuaternion(quaternion);
+						this.camera.position.copy(position.add(this.target));
+						this.camera.lookAt(this.target);
+					};
+					
+					this.dollyIn = function(dollyScale) {
+						const position = new THREE.Vector3().subVectors(this.camera.position, this.target);
+						position.multiplyScalar(dollyScale);
+						this.camera.position.copy(position.add(this.target));
+					};
+					
+					this.dollyOut = function(dollyScale) {
+						const position = new THREE.Vector3().subVectors(this.camera.position, this.target);
+						position.multiplyScalar(1/dollyScale);
+						this.camera.position.copy(position.add(this.target));
+					};
+					
+					this.pan = function(deltaX, deltaY) {
+						const offset = new THREE.Vector3();
+						const position = this.camera.position;
+						offset.copy(position).sub(this.target);
+						const targetDistance = offset.length();
+						
+						// 计算平移量
+						const element = scope.domElement;
+						const panLeft = -2 * deltaX * targetDistance / element.clientHeight;
+						const panUp = 2 * deltaY * targetDistance / element.clientHeight;
+						
+						// 应用平移
+						const v = new THREE.Vector3();
+						v.setFromMatrixColumn(camera.matrix, 0); // 获取右方向向量
+						v.multiplyScalar(panLeft);
+						scope.camera.position.add(v);
+						scope.target.add(v);
+						
+						v.setFromMatrixColumn(camera.matrix, 1); // 获取上方向向量
+						v.multiplyScalar(panUp);
+						scope.camera.position.add(v);
+						scope.target.add(v);
+					};
+					
+					this.update = function() {
+						this.camera.lookAt(this.target);
+					};
+				};
+				
+				console.log('内置的简易轨道控制器已经被加载');
+			}
+			
+			// 创建轨道控制器实例
 			settings.three.controls = new THREE.OrbitControls(settings.three.camera, settings.three.renderer.domElement);
 			settings.three.controls.enableDamping = true; // 启用阻尼效果，使控制更平滑
 			settings.three.controls.dampingFactor = 0.05; // 设置阻尼系数
-			settings.three.controls.enableZoom = true;
-			settings.three.controls.enablePan = true;
-			settings.three.controls.enableRotate = true;
+			settings.three.controls.enableZoom = true;    // 允许缩放
+			settings.three.controls.enablePan = true;     // 允许平移
+			settings.three.controls.enableRotate = true;  // 允许旋转
 			console.log('轨道控制器初始化成功');
 		} catch (error) {
 			console.error('初始化轨道控制器出错:', error);
@@ -1799,15 +2070,17 @@ var sgn = (function (settings) {
 		// 更新轨道控制器
 		if (settings.three.controls) {
 			settings.three.controls.update();
+			
+			// 确保拖拽时控制器始终启用
+			if (!settings.three.controls.enabled) {
+				settings.three.controls.enabled = true;
+			}
 		}
 		
 		// 渲染场景
 		if (settings.three.renderer && settings.three.scene && settings.three.camera) {
-			settings.three.renderer.render(settings.three.scene, settings.three.camera);
+				settings.three.renderer.render(settings.three.scene, settings.three.camera);
 		}
-		
-		// 如果我们是在播放模式，我们不需要额外渲染
-		// draw() 函数会处理绘制和渲染
 	}
 	
 	function drawCircles3D() {
@@ -1831,25 +2104,34 @@ var sgn = (function (settings) {
 			settings.three.spirographGroup.add(curve);
 		}
 		
+		// 如果齿轮被设置为隐藏，则不绘制它们
+		if (settings.circles === "hide") {
+			// 只需渲染场景，不绘制齿轮
+			if (settings.three.renderer && settings.three.scene && settings.three.camera) {
+				settings.three.renderer.render(settings.three.scene, settings.three.camera);
+			}
+			return;
+		}
+		
 		// 获取当前绘制点的位置
 		const i = settings.i;
 		
 		// 缩放因子使3D圆圈与2D圆圈大小相似
 		const scale3D = 1;
 		
-		// 定义材质
+		// 定义材质 - 使用更亮的颜色，确保在白色背景上可见
 		const circleMaterial = new THREE.MeshBasicMaterial({ 
 			color: 0x0088ff, 
 			side: THREE.DoubleSide,
 			transparent: true,
-			opacity: 0.5
+			opacity: 0.7
 		});
 		
 		const rotorMaterial = new THREE.MeshBasicMaterial({ 
-			color: 0xffdd44, 
+			color: 0xffaa00, 
 			side: THREE.DoubleSide,
 			transparent: true,
-			opacity: 0.5
+			opacity: 0.7
 		});
 		
 		const penMaterial = new THREE.MeshBasicMaterial({ 
@@ -1863,17 +2145,14 @@ var sgn = (function (settings) {
 			opacity: 0.7
 		});
 		
-		// 绘制固定圆（固定外圆）
+		// 绘制固定圆（固定外圆）- 定子
 		const statorRadius = Number(settings.radii[0]) * scale3D;
 		const statorGeometry = new THREE.RingGeometry(statorRadius - 1, statorRadius, 64);
 		const stator = new THREE.Mesh(statorGeometry, circleMaterial);
 		stator.rotation.x = Math.PI / 2; // 使其水平放置
 		settings.three.spirographGroup.add(stator);
 		
-		// 保存中心点
-		let centerPoint = new THREE.Vector3(0, 0, 0);
-		
-		// 变量初始化
+		// 变量初始化 - 与drawCircles函数中相同的逻辑
 		let c = 1;
 		let thisRad = 0;
 		let prevRad = 0;
@@ -1882,22 +2161,28 @@ var sgn = (function (settings) {
 		let prevPitch = 0;
 		let prevSpinPitch = 0;
 		let prevDrawPitch = 0;
+		let lastRotorCenter = new THREE.Vector3(0, 0, 0);
+		let finalPenPosition = null;
 		
-		// 绘制齿轮
+		// 开始绘制转子(rotors)
+		// 从中心点开始
+		let centerPoint = new THREE.Vector3(0, 0, 0);
+		
 		while (c < settings.radii.length) {
-			// 设置半径
+			// 设置半径，应用缩放
 			thisRad = Number(settings.radii[c]) * scale3D;
 			prevRad = Number(settings.radii[c - 1]) * scale3D;
 			
+			// 确定圆的类型和半径
 			if (settings.types[c] === "h") {
-				// 内圆
+				// 内旋轮线(hypotrochoid): 圆在内部滚动
 				centerRad = prevRad - thisRad;
 			} else {
-				// 外圆
+				// 外旋轮线(epitrochoid): 圆在外部滚动
 				centerRad = prevRad + thisRad;
 			}
 			
-			// 累积角度
+			// 累积角度，与2D版本相同
 			if (c > 1) {
 				prevPitch = prevPitch + settings.pitches[c - 2];
 				prevSpinPitch = prevSpinPitch + settings.spinPitches[c - 2];
@@ -1911,32 +2196,32 @@ var sgn = (function (settings) {
 			// 设置旋转方向
 			const mult = settings.directions[c];
 			
-			// 设置绘制角度
+			// 设置绘制角度和画笔角度
 			const thisPitch = (settings.drawPitches[c - 1] + prevDrawPitch) * mult;
+			let penPitch;
 			
-			// 设置画笔角度
 			if (settings.types[c] === "h") {
-				var penPitch = (settings.spinPitches[c - 1] + prevSpinPitch) * mult * -1;
+				penPitch = (settings.spinPitches[c - 1] + prevSpinPitch) * mult * -1;
 			} else {
-				var penPitch = (settings.spinPitches[c - 1] + prevSpinPitch) * mult;
+				penPitch = (settings.spinPitches[c - 1] + prevSpinPitch) * mult;
 			}
 			
-			// 计算齿轮中心位置（2D -> 3D转换）
+			// 计算转子中心在3D空间中的位置
 			const ptCanvas = circlePoint(settings.a, settings.b, centerRad, i * thisPitch);
 			const gearCenter = new THREE.Vector3(
 				ptCanvas.x - settings.a,
-				0,
-				-(ptCanvas.y - settings.b)
+				0, // 保持y=0，让万花尺保持平面
+				-(ptCanvas.y - settings.b) // 反转z轴以匹配Three.js坐标系统
 			);
 			
-			// 绘制齿轮
+			// 绘制转子(rotor)齿轮
 			const gearGeometry = new THREE.RingGeometry(thisRad - 1, thisRad, 64);
 			const gear = new THREE.Mesh(gearGeometry, rotorMaterial);
 			gear.rotation.x = Math.PI / 2; // 水平放置
 			gear.position.copy(gearCenter);
 			settings.three.spirographGroup.add(gear);
 			
-			// 计算画笔位置（相对于当前齿轮）
+			// 计算画笔位置
 			const penPtCanvas = circlePoint(ptCanvas.x, ptCanvas.y, thisRad, i * penPitch);
 			const penPosition = new THREE.Vector3(
 				penPtCanvas.x - settings.a,
@@ -1944,7 +2229,7 @@ var sgn = (function (settings) {
 				-(penPtCanvas.y - settings.b)
 			);
 			
-			// 画线连接齿轮中心和画笔位置
+			// 画线连接转子中心和画笔位置
 			const lineGeometry = new THREE.BufferGeometry().setFromPoints([
 				gearCenter,
 				penPosition
@@ -1952,47 +2237,58 @@ var sgn = (function (settings) {
 			const line = new THREE.Line(lineGeometry, lineMaterial);
 			settings.three.spirographGroup.add(line);
 			
-			// 更新中心点为当前齿轮中心
+			// 保存最后转子的信息，用于画笔
+			if (c === settings.radii.length - 1) {
+				lastRotorCenter = gearCenter.clone();
+				finalPenPosition = {
+					x: penPtCanvas.x,
+					y: penPtCanvas.y
+				};
+			}
+			
+			// 更新中心点为当前转子中心，为下一个转子做准备
 			centerPoint = gearCenter;
 			
 			c++;
 		}
 		
-		// 绘制最后一个轮子到画笔的连接线
-		if (c > 1) {
-			// 最后一个齿轮的位置
-			const lastGear = circlePoint(settings.a, settings.b, centerRad, i * thisPitch);
-			const lastGearPos = new THREE.Vector3(
-				lastGear.x - settings.a,
-				0,
-				-(lastGear.y - settings.b)
-			);
-			
-			// 画笔位置
-			const penPtCanvas = circlePoint(lastGear.x, lastGear.y, settings.penRad * scale3D, i * penPitch);
-			const penPosition = new THREE.Vector3(
-				penPtCanvas.x - settings.a,
-				0,
-				-(penPtCanvas.y - settings.b)
-			);
-			
+		// 绘制画笔 - 这是绘制曲线的关键点
+		if (finalPenPosition) {
 			// 创建画笔（小球）
 			const penGeometry = new THREE.SphereGeometry(3, 16, 16);
 			const pen = new THREE.Mesh(penGeometry, penMaterial);
-			pen.position.copy(penPosition);
+			pen.position.set(
+				finalPenPosition.x - settings.a,
+				0,
+				-(finalPenPosition.y - settings.b)
+			);
 			settings.three.spirographGroup.add(pen);
 			
-			// 画线连接最后一个齿轮和画笔
-			const lineGeometry = new THREE.BufferGeometry().setFromPoints([
-				lastGearPos,
-				penPosition
-			]);
-			const line = new THREE.Line(lineGeometry, lineMaterial);
-			settings.three.spirographGroup.add(line);
+			// 保存画笔位置用于绘制曲线
+			settings.pen = finalPenPosition;
+			
+			// 更新曲线点，这是关键部分，确保我们有正确的画笔位置
+			if (settings.curvePoints.length < 1) {
+				settings.curvePoints.push({
+					"x": finalPenPosition.x,
+					"y": finalPenPosition.y
+				});
+				settings.penStart = {
+					"x": finalPenPosition.x,
+					"y": finalPenPosition.y
+				};
+			}
+			
+			// 保持两个点，用于绘制曲线
+			settings.curvePoints[0] = settings.curvePoints[1] || settings.curvePoints[0];
+			settings.curvePoints[1] = {
+				"x": finalPenPosition.x,
+				"y": finalPenPosition.y
+			};
 		}
 		
-		// 渲染
-		if (settings.three.renderer) {
+		// 渲染更新后的场景
+		if (settings.three.renderer && settings.three.scene && settings.three.camera) {
 			settings.three.renderer.render(settings.three.scene, settings.three.camera);
 		}
 	}
@@ -2013,11 +2309,16 @@ var sgn = (function (settings) {
 		const curveGeometry = new THREE.BufferGeometry();
 		const curveMaterial = new THREE.LineBasicMaterial({ 
 			color: new THREE.Color(settings.curveColor),
-			linewidth: Math.max(1, parseFloat(settings.curveWidth) * 2), // 更粗的线条在3D中更容易看到
+			linewidth: Math.max(1, parseFloat(settings.curveWidth)), // 更粗的线条在3D中更容易看到
 			transparent: false,
 			opacity: 1.0
 		});
 		settings.three.line = new THREE.Line(curveGeometry, curveMaterial);
+		
+		// 确保线条始终可见
+		settings.three.line.visible = true;
+		
+		// 添加到场景
 		settings.three.spirographGroup.add(settings.three.line);
 		
 		// 渲染更新后的场景
