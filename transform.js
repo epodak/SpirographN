@@ -5,7 +5,11 @@ module.exports = function (fileInfo, api) {
     // 1. 提取全局设置对象
     const settingsObject = root.find(j.ObjectExpression).at(-1).get();
 
-    // 2. 创建 sgn-core.js
+    // 2. 获取spot函数的内容
+    const spotFunc = root.find(j.FunctionDeclaration, { id: { name: 'spot' } }).get();
+    const spotFuncBody = spotFunc ? j(spotFunc.value.body).toSource() : '{}';
+
+    // 创建 sgn-core.js
     const coreContent = `
 // 全局设置对象
 var sgnSettings = ${j(settingsObject).toSource()};
@@ -31,8 +35,7 @@ var sgn = (function () {
         },
         spot: function(d) {
             // 实现spot函数
-            ${root.find(j.FunctionDeclaration, { id: { name: 'spot' } })
-            .get().value.body.source()}
+            ${spotFuncBody}
         }
     };
 })();
@@ -65,9 +68,28 @@ var sgn = (function () {
         'presetEvent'
     ];
 
+    const uiFunctionsCode = uiFunctions.map(fname => {
+        const func = root.find(j.FunctionDeclaration, { id: { name: fname } });
+        return func.size() > 0 ? j(func.get()).toSource() : `function ${fname}() { /* 未找到函数实现 */ }`;
+    }).join('\n\n');
+
     const uiContent = `
 var sgnUI = function(settings) {
     'use strict';
+
+    // 添加initUI函数实现
+    function initUI(sidebarId, canvasDivId) {
+        // 这里需要实现UI初始化逻辑
+        // 基于load函数的内容
+        const loadFunc = root.find(j.FunctionDeclaration, { id: { name: 'load' } }).get();
+        if (loadFunc) {
+            ${j(root.find(j.FunctionDeclaration, { id: { name: 'load' } }).get().value.body).toSource()}
+        }
+    }
+
+    function updateURL() {
+        // URL更新逻辑
+    }
 
     return {
         initUI: initUI,
@@ -81,10 +103,7 @@ var sgnUI = function(settings) {
         inputEvent: inputEvent
     };
 
-    ${uiFunctions.map(fname =>
-        root.find(j.FunctionDeclaration, { id: { name: fname } })
-            .get().value.source()
-    ).join('\n\n')}
+    ${uiFunctionsCode}
 }`;
 
     // 4. 创建 sgn-drawing.js
@@ -102,6 +121,11 @@ var sgnUI = function(settings) {
         'rotateDrawing',
         'zoom'
     ];
+
+    const drawingFunctionsCode = drawingFunctions.map(fname => {
+        const func = root.find(j.FunctionDeclaration, { id: { name: fname } });
+        return func.size() > 0 ? j(func.get()).toSource() : `function ${fname}() { /* 未找到函数实现 */ }`;
+    }).join('\n\n');
 
     const drawingContent = `
 var sgnDrawing = function(settings) {
@@ -123,10 +147,7 @@ var sgnDrawing = function(settings) {
         resizeCanvas: canvas.resize
     };
 
-    ${drawingFunctions.map(fname =>
-        root.find(j.FunctionDeclaration, { id: { name: fname } })
-            .get().value.source()
-    ).join('\n\n')}
+    ${drawingFunctionsCode}
 }`;
 
     // 5. 创建 sgn-canvas.js
@@ -144,33 +165,39 @@ var sgnCanvas = function(settings) {
     };
 
     function setup() {
-        ${root.find(j.FunctionDeclaration, { id: { name: 'drawCanvas' } })
-            .get().value.body.source()}
+        ${j(root.find(j.FunctionDeclaration, { id: { name: 'drawCanvas' } }).size() > 0
+        ? root.find(j.FunctionDeclaration, { id: { name: 'drawCanvas' } }).get().value.body
+        : j.blockStatement([])).toSource()}
     }
 
     function resize() {
-        ${root.find(j.FunctionDeclaration, { id: { name: 'resizeCanvas' } })
-            .get().value.body.source()}
+        ${j(root.find(j.FunctionDeclaration, { id: { name: 'resizeCanvas' } }).size() > 0
+            ? root.find(j.FunctionDeclaration, { id: { name: 'resizeCanvas' } }).get().value.body
+            : j.blockStatement([])).toSource()}
     }
 
     function drawCircles() {
-        ${root.find(j.FunctionDeclaration, { id: { name: 'drawCircles' } })
-            .get().value.body.source()}
+        ${j(root.find(j.FunctionDeclaration, { id: { name: 'drawCircles' } }).size() > 0
+                ? root.find(j.FunctionDeclaration, { id: { name: 'drawCircles' } }).get().value.body
+                : j.blockStatement([])).toSource()}
     }
 
     function drawOneCircle(canvas, a, b, r, fill) {
-        ${root.find(j.FunctionDeclaration, { id: { name: 'drawOneCircle' } })
-            .get().value.body.source()}
+        ${j(root.find(j.FunctionDeclaration, { id: { name: 'drawOneCircle' } }).size() > 0
+                    ? root.find(j.FunctionDeclaration, { id: { name: 'drawOneCircle' } }).get().value.body
+                    : j.blockStatement([])).toSource()}
     }
 
     function drawCurve() {
-        ${root.find(j.FunctionDeclaration, { id: { name: 'drawCurve' } })
-            .get().value.body.source()}
+        ${j(root.find(j.FunctionDeclaration, { id: { name: 'drawCurve' } }).size() > 0
+                        ? root.find(j.FunctionDeclaration, { id: { name: 'drawCurve' } }).get().value.body
+                        : j.blockStatement([])).toSource()}
     }
 
     function clear() {
-        ${root.find(j.FunctionDeclaration, { id: { name: 'clearCanvas' } })
-            .get().value.body.source()}
+        ${j(root.find(j.FunctionDeclaration, { id: { name: 'clearCanvas' } }).size() > 0
+                            ? root.find(j.FunctionDeclaration, { id: { name: 'clearCanvas' } }).get().value.body
+                            : j.blockStatement([])).toSource()}
     }
 }`;
 
@@ -186,27 +213,31 @@ var sgnTransform = function(settings) {
     };
 
     function circlePoint(a, b, r, ng) {
-        ${root.find(j.FunctionDeclaration, { id: { name: 'circlePoint' } })
-            .get().value.body.source()}
+        ${j(root.find(j.FunctionDeclaration, { id: { name: 'circlePoint' } }).size() > 0
+        ? root.find(j.FunctionDeclaration, { id: { name: 'circlePoint' } }).get().value.body
+        : j.blockStatement([])).toSource()}
     }
 
     function rotate() {
-        ${root.find(j.FunctionDeclaration, { id: { name: 'rotateDrawing' } })
-            .get().value.body.source()}
+        ${j(root.find(j.FunctionDeclaration, { id: { name: 'rotateDrawing' } }).size() > 0
+            ? root.find(j.FunctionDeclaration, { id: { name: 'rotateDrawing' } }).get().value.body
+            : j.blockStatement([])).toSource()}
     }
 
     function zoom(inOut) {
-        ${root.find(j.FunctionDeclaration, { id: { name: 'zoom' } })
-            .get().value.body.source()}
+        ${j(root.find(j.FunctionDeclaration, { id: { name: 'zoom' } }).size() > 0
+                ? root.find(j.FunctionDeclaration, { id: { name: 'zoom' } }).get().value.body
+                : j.blockStatement([])).toSource()}
     }
 }`;
 
     // 7. 创建 sgn-presets.js
+    const presetsProperties = settingsObject.value.properties.filter(p =>
+        p.key && (p.key.name === 'presets' || p.key.name === 'penColors' || p.key.name === 'speedSettings'));
+
     const presetsContent = `
 var sgnPresets = {
-    presets: ${j(settingsObject.value.properties.find(p => p.key.name === 'presets').value).toSource()},
-    penColors: ${j(settingsObject.value.properties.find(p => p.key.name === 'penColors').value).toSource()},
-    speedSettings: ${j(settingsObject.value.properties.find(p => p.key.name === 'speedSettings').value).toSource()}
+    ${presetsProperties.map(p => `${p.key.name}: ${j(p.value).toSource()}`).join(',\n    ')}
 };`;
 
     // 8. 创建 sgn-main.js
