@@ -412,7 +412,7 @@ canvas {
 }
 
 /* 3D Mode Button */
-.button#toggle3D {
+.button#toggle3D, .button#toggleGrid {
     background-color: #007bff;
     color: white;
     font-weight: bold;
@@ -428,8 +428,13 @@ canvas {
     transition: all 0.3s ease;
 }
 
-.button#toggle3D:hover {
+.button#toggle3D:hover, .button#toggleGrid:hover {
     background-color: #0056b3;
     box-shadow: 0 4px 8px rgba(0,0,0,0.3);
     transform: translateY(-2px);
+}
+
+.button#toggleGrid {
+    background-color: #28a745; /* 绿色 */
+    margin-top: 5px;
 }
