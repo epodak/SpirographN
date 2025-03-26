@@ -25,6 +25,21 @@ SOFTWARE.
 var sgn = (function (settings) {
 	'use strict'
 
+	// Initialize settings if it's not already set
+	settings = settings || {};
+	// Enable 3D mode settings
+	settings.enable3D = false; // Flag to toggle between 2D and 3D mode
+	settings.three = {
+		scene: null,
+		camera: null,
+		renderer: null,
+		controls: null,
+		points: [], // To store the 3D points
+		container: null,
+		line: null, // The 3D curve
+		circles: [] // The 3D circles
+	};
+
 	return {
 		load: load,
 		spot: spot,
@@ -346,6 +361,8 @@ var sgn = (function (settings) {
 		e.className = "divSeparator";
 		settings.sidebarDiv.appendChild(e);
 
+		// Add 3D mode toggle button
+		toggle3DButton();
 
 		//load canvas
 		setValues();
@@ -557,13 +574,38 @@ var sgn = (function (settings) {
 		var button = makeButton(settings.idNames.draw, "draw", false, "draw");
 		settings.sidebarDiv.appendChild(button);
 		button.addEventListener("click", function () {
+			//toggle drawing on and off
 			if (!settings.draw) {
-				if (settings.i === 0) {
-					settings.timer = new Date().getTime() / 1000;
-				}
+				console.log("Starting drawing in " + (settings.enable3D ? "3D" : "2D") + " mode");
+				//calculate in seconds
+				settings.timer = new Date().getTime() / 1000;
 				settings.draw = true;
 				button.innerHTML = "pause";
 				setValues();
+				
+				// 如果在3D模式下，确保曲线已初始化
+				if (settings.enable3D) {
+					console.log("Initializing 3D curve for drawing");
+					if (!settings.three.line) {
+						clear3DScene();
+					}
+					// 重置点集合
+					settings.three.points = [];
+					// 创建新的几何体
+					if (settings.three.line && settings.three.line.geometry) {
+						settings.three.line.geometry.dispose();
+						settings.three.line.geometry = new THREE.BufferGeometry();
+					}
+					// 确保正确渲染
+					if (settings.three.renderer) {
+						settings.three.renderer.render(settings.three.scene, settings.three.camera);
+					}
+				}
+				
+				// 重置起始位置
+				settings.i = 0;
+				settings.curvePoints = [];
+				
 				requestAnimationFrame(draw);
 			} else {
 				settings.draw = false;
@@ -681,6 +723,74 @@ var sgn = (function (settings) {
 		settings.sidebarDiv.appendChild(button);
 		button.addEventListener("click", function () {
 			window.open("https://github.com/seedcode/SpirographN");
+		});
+	}
+
+	// Add 3D mode toggle button
+	function toggle3DButton() {
+		var button = document.createElement("BUTTON");
+		button.className = "button";
+		button.id = settings.idNames.toggle3D;
+		button.innerHTML = "3D";
+		button.setAttribute("title", "Enable 3D mode");
+		settings.sidebarDiv.appendChild(button);
+		
+		button.addEventListener("click", function () {
+			if (settings.enable3D) {
+				// 切换回2D模式
+				console.log("切换到2D模式");
+				settings.enable3D = false;
+				button.innerHTML = "3D";
+				button.setAttribute("title", "Enable 3D mode");
+				
+				// 隐藏Three.js渲染器
+				if (settings.three.renderer) {
+					settings.three.container.style.display = 'none';
+				}
+				
+				// 显示2D画布
+				settings.canvasCircles.style.display = 'block';
+				settings.canvasPen.style.display = 'block';
+				
+				// 在2D模式下重绘
+				clearCanvas();
+				settings.i = 0; // 重置位置
+				drawCircles();
+			} else {
+				// 切换到3D模式
+				console.log("切换到3D模式");
+				settings.enable3D = true;
+				button.innerHTML = "2D";
+				button.setAttribute("title", "Disable 3D mode");
+				
+				// 初始化Three.js（如果还没初始化）
+				if (!settings.three.scene) {
+					console.log("初始化3D场景");
+					init3D();
+				}
+				
+				// 显示Three.js渲染器
+				settings.three.container.style.display = 'block';
+				
+				// 隐藏2D画布
+				settings.canvasCircles.style.display = 'none';
+				settings.canvasPen.style.display = 'none';
+				
+				// 在3D模式下重绘
+				clearCanvas();
+				settings.i = 0; // 重置位置
+				
+				// 清除3D场景
+				clear3DScene();
+				
+				// 显示齿轮
+				drawCircles3D();
+				
+				// 如果需要继续绘制，重新启动
+				if (settings.draw) {
+					restart3D();
+				}
+			}
 		});
 	}
 
@@ -1010,6 +1120,11 @@ var sgn = (function (settings) {
 	}
 
 	function drawCircles() {
+		// If we're in 3D mode, use the 3D drawing
+		if (settings.enable3D) {
+			drawCircles3D();
+			return;
+		}
 
 		var c = 1;
 		var i = settings.i;
@@ -1022,7 +1137,6 @@ var sgn = (function (settings) {
 		var prevSpinPitch = 0;
 		var prevDrawPitch = 0;
 		var pen;
-
 
 		var zoom = settings.currentZoom;
 
@@ -1044,8 +1158,6 @@ var sgn = (function (settings) {
 		c = 1;
 		//draw rotor Circles
 		while (c < (settings.radii.length)) {
-
-
 			//set radii, applying zoom
 			thisRad = Number(settings.radii[c]) * zoom;
 			prevRad = Number(settings.radii[c - 1]) * zoom;
@@ -1158,6 +1270,12 @@ var sgn = (function (settings) {
 	}
 
 	function drawCurve() {
+		// If we're in 3D mode, draw the curve in 3D
+		if (settings.enable3D) {
+			drawCurve3D();
+			return;
+		}
+		
 		var ctx = settings.canvasPen.getContext("2d");
 		ctx.beginPath();
 		ctx.strokeStyle = settings.curveColor;
@@ -1168,18 +1286,74 @@ var sgn = (function (settings) {
 		ctx.stroke();
 		ctx.closePath();
 	}
+	
+	function drawCurve3D() {
+		// 检查是否有曲线点
+		if (!settings.curvePoints || settings.curvePoints.length < 2) {
+			return;
+		}
+		
+		// 获取点
+		const p1 = settings.curvePoints[0];
+		const p2 = settings.curvePoints[1];
+		
+		// 调整坐标到Three.js坐标系统（以0,0,0为中心）
+		// 从canvas坐标转换到以中心为原点的坐标
+		const centerX = settings.a;
+		const centerY = settings.b;
+		
+		// 创建3D点 - 目前作为平面（z=0）
+		const point = new THREE.Vector3(
+			p2.x - centerX, 
+			0, // 目前是平面的，z轴为0
+			-(p2.y - centerY) // 取负值以匹配Three.js坐标系统
+		);
+		
+		// 添加点到我们的3D点数组
+		settings.three.points.push(point);
+		
+		// 更新线条几何体
+		if (settings.three.line) {
+			// 使用更新后的点创建新的BufferGeometry
+			const geometry = new THREE.BufferGeometry().setFromPoints(settings.three.points);
+			
+			// 替换旧的几何体
+			if (settings.three.line.geometry) {
+				settings.three.line.geometry.dispose();
+			}
+			settings.three.line.geometry = geometry;
+			
+			// 更新材质颜色，以防颜色被更改
+			if (settings.three.line.material) {
+				settings.three.line.material.color.set(settings.curveColor);
+			}
+		}
+		
+		// 确保渲染场景
+		if (settings.three.renderer && settings.three.scene && settings.three.camera) {
+			settings.three.renderer.render(settings.three.scene, settings.three.camera);
+		}
+	}
 
 	function draw() {
+		// 如果处于3D模式，确保曲线已初始化
+		if (settings.enable3D && !settings.three.line) {
+			console.log('Initializing 3D curve for drawing');
+			clear3DScene();
+		}
 
-		//if we've cycled back to the beginning, then pause
+		// 如果回到了起点，则暂停
 		if (
-			settings.curvePoints[1] && settings.draw && settings.i > settings.iterator &&
+			settings.curvePoints.length >= 2 && 
+			settings.draw && 
+			settings.i > settings.iterator &&
+			settings.curvePoints[1] && 
+			settings.penStart && 
 			settings.curvePoints[1].x === settings.penStart.x &&
 			settings.curvePoints[1].y.toFixed(1) === settings.penStart.y.toFixed(1)
 		) {
 			var nd = new Date().getTime() / 1000;
 			settings.timer = nd - settings.timer;
-			//console.log(settings.timer);
 			var button = document.getElementById(settings.idNames.draw);
 			settings.draw = false;
 			button.innerHTML = "draw";
@@ -1192,12 +1366,13 @@ var sgn = (function (settings) {
 			return;
 		}
 
-		//button hs been toggled
+		// 如果按钮被切换
 		if (!settings.draw) {
 			if (settings.circleReset) {
 				settings.circles = "show";
 				settings.circleReset = false;
 			}
+			
 			drawCircles();
 			return;
 		}
@@ -1205,46 +1380,47 @@ var sgn = (function (settings) {
 		var c = 0;
 		var stu;
 
-		//adjust speed so 1 iteration per frame is the smallest we use
-		//if decimal is specified we add a timeout to the frame below.
+		// 调整速度，使每帧最小迭代次数为1
 		if (settings.speed < 1) {
 			stu = 1
 		} else {
 			stu = settings.speed;
 		}
 
-		//hide circles if we're going too fast
+		// 如果速度太快，隐藏圆圈
 		if (settings.speed > 50 && settings.circles === "show") {
 			settings.circles = "hide";
 			settings.circleReset = true;
 		} else if (settings.speed <= 50 && settings.circleReset && settings.circles === "hide") {
-			//we've slowed down, so we can show again
+			// 如果速度降低，可以再次显示
 			settings.circles = "show";
 			settings.circleReset = false;
 		}
 
-		//run circles off for internal loop
+		// 关闭内部循环的圆圈
 		if (settings.circles === "show") {
 			settings.circles = "hide";
 			var circles = true;
 		}
 
-		//flag that a drawing exists in settings
-		//hard to detect if drawing is present on canvas otherwise.
+		// 标记设置中存在绘图
 		settings.drawing = true;
 
-		//loop through the speed iterations without a frame
-		//this should run at least once
+		// 不使用帧循环速度迭代
+		// 这应该至少运行一次
 		while (c < stu) {
-			//if we've cycled back to the beginning, then pause
+			// 如果回到了起点，则暂停
 			if (
-				settings.curvePoints[1] && settings.draw && settings.i > settings.iterator &&
+				settings.curvePoints.length >= 2 && 
+				settings.draw && 
+				settings.i > settings.iterator &&
+				settings.curvePoints[1] && 
+				settings.penStart && 
 				settings.curvePoints[1].x === settings.penStart.x &&
 				settings.curvePoints[1].y.toFixed(1) === settings.penStart.y.toFixed(1)
 			) {
 				var nd = new Date().getTime() / 1000;
 				settings.timer = nd - settings.timer;
-				//console.log(settings.timer);
 				var button = document.getElementById(settings.idNames.draw);
 				settings.draw = false;
 				button.innerHTML = "draw";
@@ -1269,23 +1445,22 @@ var sgn = (function (settings) {
 
 			drawCircles();
 			drawCurve();
-			//if we've done 1000 iterations, then call frame here, so there's some initial feedback
+			// 如果我们完成了1000次迭代，在这里调用frame，以便有一些初始反馈
 			settings.i = settings.i + settings.iterator;
 			c = c + settings.iterator;
 		}
 
-		//draw
+		// 绘制
 		drawCircles();
 		drawCurve();
 
-		//if we're decimal on speed then create timeout
+		// 如果速度是小数，则创建timeout
 		if (settings.speed < 1) {
 			setTimeout(draw, 10 / settings.speed);
 		} else {
-			//or just request frame
+			// 或者只请求下一帧
 			requestAnimationFrame(draw);
 		}
-
 	}
 
 	function colorInputOK() {
@@ -1347,6 +1522,11 @@ var sgn = (function (settings) {
 		//clear
 		var ctx = settings.canvasPen.getContext("2d");
 		ctx.clearRect(0, 0, settings.canvasPen.width, settings.canvasPen.height);
+		
+		// If in 3D mode, clear the 3D scene as well
+		if (settings.enable3D) {
+			clear3DScene();
+		}
 
 		//restore Zoom
 		if (z) {
@@ -1358,6 +1538,22 @@ var sgn = (function (settings) {
 	function restart() {
 		settings.i = 0;
 		setValues();
+		
+		// 如果在3D模式，重置3D图形
+		if (settings.enable3D) {
+			// 清除当前3D曲线
+			settings.three.points = [];
+			if (settings.three.line) {
+				if (settings.three.line.geometry) {
+					settings.three.line.geometry.dispose();
+					settings.three.line.geometry = new THREE.BufferGeometry();
+				}
+			} else {
+				// 如果曲线不存在，初始化它
+				clear3DScene();
+			}
+		}
+		
 		drawCircles();
 	}
 
@@ -1475,6 +1671,365 @@ var sgn = (function (settings) {
 
 	}
 
+	function init3D() {
+		console.log('Initializing 3D mode...');
+		
+		// Create container for Three.js canvas
+		settings.three.container = document.createElement('div');
+		settings.three.container.id = 'three-container';
+		settings.three.container.style.position = 'absolute';
+		settings.three.container.style.width = '100%';
+		settings.three.container.style.height = '100%';
+		settings.three.container.style.left = '0';
+		settings.three.container.style.top = '0';
+		settings.three.container.style.zIndex = '15'; // Between circles and pen canvas
+		settings.divCanvas.appendChild(settings.three.container);
+		
+		// Create Three.js scene
+		settings.three.scene = new THREE.Scene();
+		settings.three.scene.background = new THREE.Color(0x111111); // 深色背景，与3d-spirograph一致
+		
+		// Create camera
+		const width = settings.divCanvas.clientWidth - settings.sidebarWidth;
+		const height = settings.divCanvasHeight;
+		const aspect = width / height;
+		settings.three.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 2000);
+		settings.three.camera.position.set(0, 300, 500); // 初始相机位置
+		settings.three.camera.lookAt(0, 0, 0);
+		
+		// Create renderer with antialias
+		settings.three.renderer = new THREE.WebGLRenderer({ antialias: true });
+		settings.three.renderer.setSize(width, height);
+		settings.three.container.appendChild(settings.three.renderer.domElement);
+		
+		// Add orbit controls - 确保引用正确
+		try {
+			console.log('Setting up OrbitControls...');
+			settings.three.controls = new THREE.OrbitControls(settings.three.camera, settings.three.renderer.domElement);
+			settings.three.controls.enableDamping = true; // 启用阻尼效果，使控制更平滑
+			settings.three.controls.dampingFactor = 0.05; // 设置阻尼系数
+			settings.three.controls.enableZoom = true;
+			settings.three.controls.enablePan = true;
+			settings.three.controls.enableRotate = true;
+			console.log('OrbitControls initialized successfully');
+		} catch (error) {
+			console.error('Error initializing OrbitControls:', error);
+		}
+		
+		// Add lights for better 3D visualization
+		// 添加环境光，提供柔和的全局照明
+		const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+		settings.three.scene.add(ambientLight);
+		
+		// 添加平行光源，模拟太阳光
+		const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+		directionalLight.position.set(0, 1, 1); // 设置光源位置
+		settings.three.scene.add(directionalLight);
+		
+		// 添加额外的平行光源，从另一个角度提供照明
+		const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+		directionalLight2.position.set(1, 0.5, -1); // 设置第二个光源的位置
+		settings.three.scene.add(directionalLight2);
+		
+		// Add grid helper for better 3D orientation
+		const gridHelper = new THREE.GridHelper(800, 50, 0x444444, 0x222222);
+		settings.three.scene.add(gridHelper);
+		
+		// Create a group for the spirograph elements
+		settings.three.spirographGroup = new THREE.Group();
+		settings.three.scene.add(settings.three.spirographGroup);
+		
+		// Create new empty curve for drawing
+		clear3DScene();
+		
+		// Start animation loop
+		animate3D();
+		
+		console.log('3D mode initialized');
+	}
+	
+	function animate3D() {
+		if (!settings.enable3D) return; // Stop animation if 3D mode is disabled
+		
+		requestAnimationFrame(animate3D);
+		
+		// 更新轨道控制器
+		if (settings.three.controls) {
+			settings.three.controls.update();
+		}
+		
+		// 渲染场景
+		if (settings.three.renderer && settings.three.scene && settings.three.camera) {
+			settings.three.renderer.render(settings.three.scene, settings.three.camera);
+		}
+		
+		// 如果我们是在播放模式，我们不需要额外渲染
+		// draw() 函数会处理绘制和渲染
+	}
+	
+	function drawCircles3D() {
+		// 确保清除现有的圆圈但保留曲线
+		// 保存现有的曲线
+		let curve = null;
+		for (let i = 0; i < settings.three.spirographGroup.children.length; i++) {
+			const obj = settings.three.spirographGroup.children[i];
+			if (obj === settings.three.line) {
+				curve = obj;
+				continue; // 保留曲线
+			}
+			if (obj.geometry) obj.geometry.dispose();
+			if (obj.material) obj.material.dispose();
+			settings.three.spirographGroup.remove(obj);
+			i--; // 因为我们删除了一个元素，所以索引需要减一
+		}
+		
+		// 重新添加曲线
+		if (curve) {
+			settings.three.spirographGroup.add(curve);
+		}
+		
+		// 获取当前绘制点的位置
+		const i = settings.i;
+		
+		// 缩放因子使3D圆圈与2D圆圈大小相似
+		const scale3D = 1;
+		
+		// 定义材质
+		const circleMaterial = new THREE.MeshBasicMaterial({ 
+			color: 0x0088ff, 
+			side: THREE.DoubleSide,
+			transparent: true,
+			opacity: 0.5
+		});
+		
+		const rotorMaterial = new THREE.MeshBasicMaterial({ 
+			color: 0xffdd44, 
+			side: THREE.DoubleSide,
+			transparent: true,
+			opacity: 0.5
+		});
+		
+		const penMaterial = new THREE.MeshBasicMaterial({ 
+			color: new THREE.Color(settings.curveColor), 
+			side: THREE.DoubleSide
+		});
+		
+		const lineMaterial = new THREE.LineBasicMaterial({ 
+			color: 0x444444,
+			transparent: true,
+			opacity: 0.7
+		});
+		
+		// 绘制固定圆（固定外圆）
+		const statorRadius = Number(settings.radii[0]) * scale3D;
+		const statorGeometry = new THREE.RingGeometry(statorRadius - 1, statorRadius, 64);
+		const stator = new THREE.Mesh(statorGeometry, circleMaterial);
+		stator.rotation.x = Math.PI / 2; // 使其水平放置
+		settings.three.spirographGroup.add(stator);
+		
+		// 保存中心点
+		let centerPoint = new THREE.Vector3(0, 0, 0);
+		
+		// 变量初始化
+		let c = 1;
+		let thisRad = 0;
+		let prevRad = 0;
+		let centerRad = 0;
+		let thisPitch = 0;
+		let prevPitch = 0;
+		let prevSpinPitch = 0;
+		let prevDrawPitch = 0;
+		
+		// 绘制齿轮
+		while (c < settings.radii.length) {
+			// 设置半径
+			thisRad = Number(settings.radii[c]) * scale3D;
+			prevRad = Number(settings.radii[c - 1]) * scale3D;
+			
+			if (settings.types[c] === "h") {
+				// 内圆
+				centerRad = prevRad - thisRad;
+			} else {
+				// 外圆
+				centerRad = prevRad + thisRad;
+			}
+			
+			// 累积角度
+			if (c > 1) {
+				prevPitch = prevPitch + settings.pitches[c - 2];
+				prevSpinPitch = prevSpinPitch + settings.spinPitches[c - 2];
+				prevDrawPitch = prevDrawPitch + settings.drawPitches[c - 2];
+			} else {
+				prevPitch = 0;
+				prevSpinPitch = 0;
+				prevDrawPitch = 0;
+			}
+			
+			// 设置旋转方向
+			const mult = settings.directions[c];
+			
+			// 设置绘制角度
+			const thisPitch = (settings.drawPitches[c - 1] + prevDrawPitch) * mult;
+			
+			// 设置画笔角度
+			if (settings.types[c] === "h") {
+				var penPitch = (settings.spinPitches[c - 1] + prevSpinPitch) * mult * -1;
+			} else {
+				var penPitch = (settings.spinPitches[c - 1] + prevSpinPitch) * mult;
+			}
+			
+			// 计算齿轮中心位置（2D -> 3D转换）
+			const ptCanvas = circlePoint(settings.a, settings.b, centerRad, i * thisPitch);
+			const gearCenter = new THREE.Vector3(
+				ptCanvas.x - settings.a,
+				0,
+				-(ptCanvas.y - settings.b)
+			);
+			
+			// 绘制齿轮
+			const gearGeometry = new THREE.RingGeometry(thisRad - 1, thisRad, 64);
+			const gear = new THREE.Mesh(gearGeometry, rotorMaterial);
+			gear.rotation.x = Math.PI / 2; // 水平放置
+			gear.position.copy(gearCenter);
+			settings.three.spirographGroup.add(gear);
+			
+			// 计算画笔位置（相对于当前齿轮）
+			const penPtCanvas = circlePoint(ptCanvas.x, ptCanvas.y, thisRad, i * penPitch);
+			const penPosition = new THREE.Vector3(
+				penPtCanvas.x - settings.a,
+				0,
+				-(penPtCanvas.y - settings.b)
+			);
+			
+			// 画线连接齿轮中心和画笔位置
+			const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+				gearCenter,
+				penPosition
+			]);
+			const line = new THREE.Line(lineGeometry, lineMaterial);
+			settings.three.spirographGroup.add(line);
+			
+			// 更新中心点为当前齿轮中心
+			centerPoint = gearCenter;
+			
+			c++;
+		}
+		
+		// 绘制最后一个轮子到画笔的连接线
+		if (c > 1) {
+			// 最后一个齿轮的位置
+			const lastGear = circlePoint(settings.a, settings.b, centerRad, i * thisPitch);
+			const lastGearPos = new THREE.Vector3(
+				lastGear.x - settings.a,
+				0,
+				-(lastGear.y - settings.b)
+			);
+			
+			// 画笔位置
+			const penPtCanvas = circlePoint(lastGear.x, lastGear.y, settings.penRad * scale3D, i * penPitch);
+			const penPosition = new THREE.Vector3(
+				penPtCanvas.x - settings.a,
+				0,
+				-(penPtCanvas.y - settings.b)
+			);
+			
+			// 创建画笔（小球）
+			const penGeometry = new THREE.SphereGeometry(3, 16, 16);
+			const pen = new THREE.Mesh(penGeometry, penMaterial);
+			pen.position.copy(penPosition);
+			settings.three.spirographGroup.add(pen);
+			
+			// 画线连接最后一个齿轮和画笔
+			const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+				lastGearPos,
+				penPosition
+			]);
+			const line = new THREE.Line(lineGeometry, lineMaterial);
+			settings.three.spirographGroup.add(line);
+		}
+		
+		// 渲染
+		if (settings.three.renderer) {
+			settings.three.renderer.render(settings.three.scene, settings.three.camera);
+		}
+	}
+	
+	function clear3DScene() {
+		// 清除曲线点数组
+		settings.three.points = [];
+		
+		// 移除现有的3D曲线
+		if (settings.three.line) {
+			if (settings.three.line.geometry) settings.three.line.geometry.dispose();
+			if (settings.three.line.material) settings.three.line.material.dispose();
+			settings.three.spirographGroup.remove(settings.three.line);
+			settings.three.line = null;
+		}
+		
+		// 创建新的空曲线
+		const curveGeometry = new THREE.BufferGeometry();
+		const curveMaterial = new THREE.LineBasicMaterial({ 
+			color: new THREE.Color(settings.curveColor),
+			linewidth: Math.max(1, parseFloat(settings.curveWidth) * 2), // 更粗的线条在3D中更容易看到
+			transparent: false,
+			opacity: 1.0
+		});
+		settings.three.line = new THREE.Line(curveGeometry, curveMaterial);
+		settings.three.spirographGroup.add(settings.three.line);
+		
+		// 渲染更新后的场景
+		if (settings.three.renderer && settings.three.scene && settings.three.camera) {
+			settings.three.renderer.render(settings.three.scene, settings.three.camera);
+		}
+	}
+	
+	function restart3D() {
+		console.log("重新启动3D绘制");
+		// 重置绘制参数
+		settings.three.points = [];
+		settings.i = 0;
+		settings.curvePoints = [];
+		
+		// 清除现有曲线
+		clear3DScene();
+		
+		// 绘制齿轮状态
+		drawCircles3D();
+		
+		// 如果处于绘制模式，启动绘制过程
+		if (settings.draw) {
+			console.log("恢复绘制...");
+			requestAnimationFrame(draw);
+		}
+	}
+	
+	// Update window resize handler to support 3D mode
+	function handleWindowResize() {
+		console.log("窗口大小变化");
+		// 更新2D画布
+		resizeCanvas();
+		
+		// 如果在3D模式，更新Three.js组件
+		if (settings.enable3D && settings.three.renderer) {
+			console.log("调整3D渲染器大小");
+			const width = settings.divCanvas.clientWidth - settings.sidebarWidth;
+			const height = settings.divCanvasHeight;
+			
+			if (settings.three.camera) {
+				settings.three.camera.aspect = width / height;
+				settings.three.camera.updateProjectionMatrix();
+			}
+			
+			if (settings.three.renderer) {
+				settings.three.renderer.setSize(width, height);
+				settings.three.renderer.render(settings.three.scene, settings.three.camera);
+			}
+		}
+	}
+	
+	// Override the existing window resize handler with our new one
+	window.removeEventListener('resize', resizeCanvas);
+	window.addEventListener('resize', handleWindowResize);
 
 })(
 	//settings object
@@ -1560,6 +2115,8 @@ var sgn = (function (settings) {
 			"zoomOutLabel": "zoomOutnLabel",
 			"zoomOutIcon": "zoomOutnIcon",
 			"angle": "angle",
+			"toggle3D": "toggle3D",
+			"toggle3DIcon": "toggle3DIcon",
 		},
 		"presets": [
 
